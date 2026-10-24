@@ -1,9 +1,33 @@
-﻿{
+{
   "name": "syncfix",
   "version": "1.0.0",
   "private": true,
-  "description": "SyncFix - monitored data synchronization and repair for small teams.",
-  "license": "SEE LICENSE IN LICENSE",
+  "description": "SyncFix - monitored data synchronization and repair for small teams. One-way sync (source→destination) with field mapping, transforms, dry-run preview, idempotent writes, conflict policies, checkpoint resume, per-record repair.",
+  "license": "MIT",
+  "homepage": "https://github.com/shivang-jindal/SyncFix#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/shivang-jindal/SyncFix.git"
+  },
+  "bugs": {
+    "url": "https://github.com/shivang-jindal/SyncFix/issues"
+  },
+  "keywords": [
+    "sync",
+    "etl",
+    "data-sync",
+    "field-mapping",
+    "transform",
+    "idempotent",
+    "conflict-resolution",
+    "checkpoint",
+    "repair",
+    "saas",
+    "react",
+    "express",
+    "drizzle",
+    "typescript"
+  ],
   "engines": {
     "node": ">=20.11"
   },
