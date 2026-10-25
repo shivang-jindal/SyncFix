@@ -28,15 +28,18 @@ export function createApiRouter(services: Services): Router {
 
   router.use('/health', healthRouter(services));
 
-  // Public routes are deliberately mounted before authentication. The ingest
-  // route is authenticated by its HMAC signature, not by a session.
+  // The ingest route is authenticated by its HMAC signature, not by a session.
   router.use('/ingest', ingestRouter(services));
+
+  // Resolve the session (when present) for every route, including `/auth`,
+  // whose `/session` endpoint must be able to see the cookie. This middleware
+  // never rejects — the guard below does that for everything past `/auth`.
+  router.use(requireAuth(services));
 
   router.use('/auth', authRouter(services));
 
   // Every remaining route requires a session.
-  const authenticated = requireAuth(services);
-  router.use(authenticated, requireAuthenticated());
+  router.use(requireAuthenticated());
 
   router.get(
     '/session/context',
@@ -61,7 +64,7 @@ export function createApiRouter(services: Services): Router {
   organizationScoped.use('/issues', issueRouter(services));
   organizationScoped.use('/webhook-endpoints', webhookEndpointRouter(services));
   organizationScoped.use('/', organizationRouter(services));
-  organizationScoped.use('/', reportRouter(services));
+  organizationScoped.use('/reports', reportRouter(services));
 
   router.use('/:organizationId', organizationScoped);
 

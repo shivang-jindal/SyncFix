@@ -8,6 +8,8 @@
 
 import { z } from 'zod';
 
+import { DEFAULT_ALLOWED_PORTS } from './lib/safe-fetch.js';
+
 const booleanish = z
   .union([z.boolean(), z.string()])
   .transform((value) =>
@@ -54,6 +56,13 @@ const envSchema = z.object({
   WORKER_ENABLED: booleanish.default(true),
   WORKER_POLL_INTERVAL_MS: z.coerce.number().int().min(200).max(60_000).default(2_000),
   WORKER_CONCURRENCY: z.coerce.number().int().min(1).max(20).default(3),
+
+  /**
+   * TCP ports a user-configured connection may target. Comma separated. The
+   * default is a narrow, safe set; widen it only for integrations you control
+   * (for example an internal API on 8081).
+   */
+  OUTBOUND_ALLOWED_PORTS: optionalString,
 
   /**
    * DEVELOPMENT ONLY. Hostnames (for example a local demo fixture server on
@@ -105,6 +114,8 @@ export interface AppConfig {
   };
   /** Development-only SSRF allow list; always empty in production. */
   ssrfAllowHosts: string[];
+  /** Ports an outbound connection may target, validated at startup. */
+  outboundAllowedPorts: number[];
   session: {
     cookieName: string;
     ttlHours: number;
@@ -171,6 +182,8 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
     warnings.push('COOKIE_SECURE should stay enabled in production.');
   }
 
+  const outboundAllowedPorts = parseAllowedPorts(env.OUTBOUND_ALLOWED_PORTS, warnings);
+
   const cookieSecure = env.COOKIE_SECURE ?? env.NODE_ENV === 'production';
 
   return {
@@ -201,6 +214,7 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
       concurrency: env.WORKER_CONCURRENCY,
     },
     ssrfAllowHosts,
+    outboundAllowedPorts,
     session: {
       cookieName: env.SESSION_COOKIE_NAME,
       ttlHours: env.SESSION_TTL_HOURS,
@@ -216,6 +230,27 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
     seedDemoData: env.SEED_DEMO_DATA,
     warnings,
   };
+}
+
+function parseAllowedPorts(value: string | undefined, warnings: string[]): number[] {
+  if (!value || value.trim() === '') return [...DEFAULT_ALLOWED_PORTS];
+  const ports = value
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .map((entry) => Number(entry));
+  if (ports.length === 0) return [...DEFAULT_ALLOWED_PORTS];
+  for (const port of ports) {
+    if (!Number.isInteger(port) || port < 1 || port > 65_535) {
+      throw new Error(
+        'OUTBOUND_ALLOWED_PORTS must be a comma-separated list of TCP ports between 1 and 65535.',
+      );
+    }
+  }
+  warnings.push(
+    `OUTBOUND_ALLOWED_PORTS replaces the default outbound port allow-list with ${ports.join(', ')}. Confirm every one of these is a port you intend connectors to reach.`,
+  );
+  return ports;
 }
 
 function parseEncryptionKey(value: string | undefined, warnings: string[]): Buffer | null {

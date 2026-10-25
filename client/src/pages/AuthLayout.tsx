@@ -20,9 +20,9 @@ export function AuthLayout({
       <div className="w-full max-w-sm">
         <div className="mb-6 flex items-center gap-2">
           <span className="flex h-8 w-8 items-center justify-center rounded-md bg-brand-600 text-sm font-bold text-white">
-            C
+            S
           </span>
-          <span className="text-base font-semibold text-ink">CollectFlow</span>
+          <span className="text-base font-semibold text-ink">SyncFix</span>
         </div>
         <Card>
           <div className="px-5 py-5">
@@ -33,7 +33,7 @@ export function AuthLayout({
         </Card>
         {footer ? <div className="mt-4 text-center text-[13px] text-ink-muted">{footer}</div> : null}
         <p className="mt-6 text-center text-xs text-ink-subtle">
-          CollectFlow is an invoicing and payment-tracking tool. It is not a bank, payment processor or tax adviser.
+          SyncFix reconciles CRM, billing and support records. It never overwrites a destination field without a mapped rule.
         </p>
       </div>
     </div>

@@ -6,7 +6,7 @@
  * `null`, never as 0% or 100% (Part D / D4.7).
  */
 
-import { and, desc, eq, gte, inArray, lte, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, lte, sql } from 'drizzle-orm';
 
 import type { OverviewSummary, RunStatus, SyncHealthReport } from '@syncfix/shared';
 
@@ -92,7 +92,7 @@ export class ReportService {
       );
 
     const lastSyncRows = await this.db
-      .select({ last: sql<Date | null>`max(${syncRuns.finishedAt})` })
+      .select({ last: sql<Date | string | null>`max(${syncRuns.finishedAt})` })
       .from(syncRuns)
       .where(
         and(
@@ -132,7 +132,7 @@ export class ReportService {
       openIssues: issueCounts.open,
       criticalIssues: issueCounts.critical,
       recordsProcessed: recordsRows[0]?.count ?? 0,
-      lastSyncAt: lastSyncRows[0]?.last?.toISOString() ?? null,
+      lastSyncAt: this.toIso(lastSyncRows[0]?.last),
       connectionsVerified,
       connectionsNeedingAttention,
       jobHealth,
@@ -140,6 +140,17 @@ export class ReportService {
         .filter((row) => row.errorCode !== null)
         .map((row) => ({ errorCode: row.errorCode as string, issueCount: row.count })),
     };
+  }
+
+  /**
+   * `max(timestamp)` is typed as a Date but the wire value depends on the
+   * driver (PGlite returns a string, node-postgres returns a Date). Normalise
+   * both instead of calling `.toISOString()` on a string.
+   */
+  private toIso(value: Date | string | null | undefined): string | null {
+    if (!value) return null;
+    const date = value instanceof Date ? value : new Date(value);
+    return Number.isNaN(date.getTime()) ? null : date.toISOString();
   }
 
   private async jobHealth(organizationId: string, window: Window): Promise<OverviewSummary['jobHealth']> {
@@ -177,7 +188,7 @@ export class ReportService {
       const totalRuns = rows.reduce((sum, row) => sum + row.count, 0);
 
       const [lastRun] = await this.db
-        .select({ last: sql<Date | null>`max(${syncRuns.startedAt})` })
+        .select({ last: sql<Date | string | null>`max(${syncRuns.startedAt})` })
         .from(syncRuns)
         .where(
           and(eq(syncRuns.organizationId, organizationId), eq(syncRuns.syncJobId, job.id), sql`${syncRuns.dryRun} = false`),
@@ -207,7 +218,7 @@ export class ReportService {
           successRatePercent: totalRuns === 0 ? null : (successfulRuns / totalRuns) * 100,
         },
         openIssues: openIssues?.count ?? 0,
-        lastRunAt: lastRun?.last?.toISOString() ?? null,
+        lastRunAt: this.toIso(lastRun?.last),
       });
     }
     return results;
@@ -280,7 +291,7 @@ export class ReportService {
       const jobRuns = rows.reduce((sum, row) => sum + row.count, 0);
 
       const [lastRun] = await this.db
-        .select({ last: sql<Date | null>`max(${syncRuns.startedAt})` })
+        .select({ last: sql<Date | string | null>`max(${syncRuns.startedAt})` })
         .from(syncRuns)
         .where(
           and(eq(syncRuns.organizationId, organizationId), eq(syncRuns.syncJobId, job.id), sql`${syncRuns.dryRun} = false`),
@@ -305,7 +316,7 @@ export class ReportService {
         partial: jobPartial,
         failed: jobFailed,
         successRatePercent: jobRuns === 0 ? null : (jobSucceeded / jobRuns) * 100,
-        lastRunAt: lastRun?.last?.toISOString() ?? null,
+        lastRunAt: this.toIso(lastRun?.last),
         openIssues: openIssues?.count ?? 0,
       });
     }
@@ -382,6 +393,98 @@ export class ReportService {
     };
   }
 
+  /**
+   * Paginated run history for the whole organization. The Sync runs screen
+   * needs cross-job history; per-job history stays on /sync-jobs/:id/runs.
+   */
+  async runs(
+    organizationId: string,
+    query: {
+      page: number;
+      pageSize: number;
+      status: string;
+      trigger: string;
+      sort: string;
+      order: 'asc' | 'desc';
+    },
+  ): Promise<{
+    items: Array<{
+      id: string;
+      syncJobId: string;
+      jobName: string;
+      status: RunStatus;
+      triggerType: string;
+      dryRun: boolean;
+      startedAt: string;
+      finishedAt: string | null;
+      durationMs: number | null;
+      fetchedCount: number;
+      createdCount: number;
+      updatedCount: number;
+      skippedCount: number;
+      failedCount: number;
+      errorCode: string | null;
+      safeMessage: string | null;
+    }>;
+    page: number;
+    pageSize: number;
+    total: number;
+    totalPages: number;
+  }> {
+    const filters = [eq(syncRuns.organizationId, organizationId)];
+    if (query.status && query.status !== 'all') filters.push(eq(syncRuns.status, query.status));
+    if (query.trigger && query.trigger !== 'all') {
+      filters.push(eq(syncRuns.triggerType, query.trigger));
+    }
+    const where = and(...filters);
+    const sortColumn =
+      query.sort === 'finished_at'
+        ? syncRuns.finishedAt
+        : query.sort === 'duration_ms'
+          ? syncRuns.durationMs
+          : syncRuns.startedAt;
+    const direction = query.order === 'asc' ? asc : desc;
+
+    const rows = await this.db
+      .select({ run: syncRuns, jobName: syncJobs.name })
+      .from(syncRuns)
+      .innerJoin(syncJobs, eq(syncJobs.id, syncRuns.syncJobId))
+      .where(where)
+      .orderBy(direction(sortColumn), desc(syncRuns.startedAt))
+      .limit(query.pageSize)
+      .offset((query.page - 1) * query.pageSize);
+
+    const totals = await this.db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(syncRuns)
+      .where(where);
+    const total = totals[0]?.count ?? 0;
+
+    return {
+      items: rows.map((row) => ({
+        id: row.run.id,
+        syncJobId: row.run.syncJobId,
+        jobName: row.jobName,
+        status: row.run.status as RunStatus,
+        triggerType: row.run.triggerType,
+        dryRun: row.run.dryRun,
+        startedAt: row.run.startedAt.toISOString(),
+        finishedAt: row.run.finishedAt?.toISOString() ?? null,
+        durationMs: row.run.durationMs,
+        fetchedCount: row.run.fetchedCount,
+        createdCount: row.run.createdCount,
+        updatedCount: row.run.updatedCount,
+        skippedCount: row.run.skippedCount,
+        failedCount: row.run.failedCount,
+        errorCode: row.run.errorCode,
+        safeMessage: row.run.safeMessage,
+      })),
+      page: query.page,
+      pageSize: query.pageSize,
+      total,
+      totalPages: Math.max(1, Math.ceil(total / query.pageSize)),
+    };
+  }
   async recentRuns(organizationId: string, limit = 10) {
     return this.db
       .select({

@@ -14,7 +14,7 @@ import { LogEmailAdapter } from './integrations/email/log.js';
 import { SmtpEmailAdapter } from './integrations/email/smtp.js';
 import type { EmailAdapter } from './integrations/email/types.js';
 import { JobQueue } from './jobs/queue.js';
-import { configureSsrfAllowList } from './lib/safe-fetch.js';
+import { configureAllowedPorts, configureSsrfAllowList } from './lib/safe-fetch.js';
 import { AuditService } from './services/audit.service.js';
 import { AuthService } from './services/auth.service.js';
 import { ConnectionService } from './services/connection.service.js';
@@ -56,6 +56,7 @@ export function createServices(options: {
 
   // Applied once per process. In production this is always an empty list.
   configureSsrfAllowList(config.ssrfAllowHosts);
+  configureAllowedPorts(config.outboundAllowedPorts);
 
   const emailAdapter = createEmailAdapter(config);
   const audit = new AuditService(db);

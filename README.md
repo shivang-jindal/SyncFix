@@ -36,11 +36,31 @@ npm run dev
 
 Configure `.env` (copy `.env.example`):
 ```env
-DATABASE_URL="postgresql://..."  # or omit for PGlite
-ENCRYPTION_KEY="64-char-hex-key"
-SESSION_SECRET="random-string"
-EMAIL_PROVIDER="smtp|disabled|log"
+PGLITE_DATA_DIR=".data/pgdata"      # or set DATABASE_URL for PostgreSQL
+ENCRYPTION_KEY="64-char-hex-key"    # required before credentials can be stored
+EMAIL_PROVIDER="disabled"           # disabled | log | smtp
 ```
+
+### Local demo (optional)
+
+`npm run db:seed` creates a demo workspace, one source and one destination connection, and a
+paused sync job. To watch a real sync locally, run the fixture source and allow loopback in
+development:
+
+```bash
+# terminal 1: API + worker + web
+npm run dev
+
+# terminal 2: the fixture source/destination on http://127.0.0.1:8080
+npm run demo:source
+
+# .env - development only; the loader refuses to start with it in production
+SSRF_ALLOW_HOSTS=127.0.0.1
+```
+
+Sign in as `demo@syncfix.test` / `syncfix-demo-1234`, open **Sync jobs**, enable the seeded job,
+then choose **Run now**. The fixture also exposes `/flaky` (always 503) and `/slow` (never
+answers) so failure handling can be exercised on purpose.
 
 ---
 
@@ -70,8 +90,10 @@ All settings via environment variables (see `.env.example`):
 |----------|----------|-------------|
 | `DATABASE_URL` | No | PostgreSQL URL (omit for PGlite) |
 | `ENCRYPTION_KEY` | Yes | 64-char hex (32 bytes) |
-| `SESSION_SECRET` | Yes | Random string |
-| `EMAIL_PROVIDER` | Yes | `smtp` \| `disabled` \| `log` |
+| `SESSION_COOKIE_NAME` | No | Session cookie name (default `syncfix_session`) |
+| `EMAIL_PROVIDER` | No | `smtp` \| `disabled` \| `log` |
+| `OUTBOUND_ALLOWED_PORTS` | No | Ports connectors may reach (default `80,443,8080,8443`) |
+| `SSRF_ALLOW_HOSTS` | No | Development only; loopback hosts for the local fixture |
 
 ---
 

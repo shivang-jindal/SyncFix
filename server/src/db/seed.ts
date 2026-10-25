@@ -1,3 +1,5 @@
+import '../load-env.js';
+
 /**
  * Development / demo seed (`npm run db:seed`).
  *
@@ -25,7 +27,7 @@ import { createLogger } from '../logger.js';
 const DEMO_EMAIL = process.env.SEED_EMAIL ?? 'demo@syncfix.test';
 const DEMO_PASSWORD = process.env.SEED_PASSWORD ?? 'syncfix-demo-1234';
 /** The local demo fixture server started by `npm run demo:source`. */
-const DEMO_BASE_URL = process.env.SEED_DEMO_BASE_URL ?? 'http://127.0.0.1:4321';
+const DEMO_BASE_URL = process.env.SEED_DEMO_BASE_URL ?? 'http://127.0.0.1:8080';
 
 const REST_SETTINGS = {
   baseUrl: DEMO_BASE_URL,
@@ -215,6 +217,9 @@ async function main(): Promise<void> {
     console.log(`           source conn:  ${source.name} -> ${DEMO_BASE_URL}`);
     console.log(`           dest conn:    ${destination.name}`);
     console.log(`           job:          ${job.name} (PAUSED - nothing runs until you enable it)`);
+    console.log(
+      '           fixture:      start it with `npm run demo:source` and keep SSRF_ALLOW_HOSTS=127.0.0.1 in .env (development only)',
+    );
     console.log('');
     console.log('[db:seed] The demo REST connections point at a LOCAL fixture server.');
     console.log('           Start it with:  npm run demo:source');

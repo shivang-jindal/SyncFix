@@ -130,12 +130,18 @@ export class RestConnectorAdapter implements ConnectorAdapter {
     template: string,
     entity: string,
     query: Record<string, string | undefined>,
+    recordId?: string,
   ): string {
     const settings = this.settings(ctx);
     const base = validateUrlShape(settings.baseUrl);
+    if (template.includes('{id}') && !recordId) {
+      // Building a per-record URL without the record key would collapse every
+      // write onto one destination object. Refuse instead of guessing.
+      throw new Error('A record key is required to build this URL.');
+    }
     const rendered = template
       .replaceAll('{entity}', encodeURIComponent(entity))
-      .replaceAll('{id}', encodeURIComponent(entity));
+      .replaceAll('{id}', encodeURIComponent(recordId ?? ''));
     const target = new URL(rendered.startsWith('/') ? rendered : `/${rendered}`, base);
     for (const [key, value] of Object.entries(query)) {
       if (value !== undefined) target.searchParams.set(key, value);
@@ -365,10 +371,9 @@ export class RestConnectorAdapter implements ConnectorAdapter {
     const template = settings.readPathTemplate.includes('{id}')
       ? settings.readPathTemplate
       : `${settings.readPathTemplate.replace(/\/$/, '')}/{id}`;
-    const url = this.buildUrl(ctx, template, entity, {});
-    const target = url.replace(/\{id\}$/, encodeURIComponent(key));
+    const url = this.buildUrl(ctx, template, entity, {}, key);
     try {
-      const response = await this.request(ctx, target, { headers: this.headers(ctx) });
+      const response = await this.request(ctx, url, { headers: this.headers(ctx) });
       return this.toRecord(response.body, settings);
     } catch (error) {
       if (error instanceof AdapterError && error.normalized.kind === 'not_found') return null;
@@ -387,7 +392,13 @@ export class RestConnectorAdapter implements ConnectorAdapter {
     const template = settings.writePathTemplate.includes('{id}')
       ? settings.writePathTemplate
       : `${settings.writePathTemplate.replace(/\/$/, '')}/{id}`;
-    const url = this.buildUrl(ctx, template, entity, { idempotency_key: idempotencyKey });
+    const url = this.buildUrl(
+      ctx,
+      template,
+      entity,
+      { idempotency_key: idempotencyKey },
+      record.key,
+    );
 
     const response = await this.request(ctx, url, {
       method: 'PUT',

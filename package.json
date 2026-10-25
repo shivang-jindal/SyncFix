@@ -53,6 +53,7 @@
     "dev:client": "npm run dev -w @syncfix/client",
     "dev:worker": "npm run worker -w @syncfix/server",
     "dev": "node scripts/dev.mjs",
+    "demo:source": "node scripts/demo-source.mjs",
     "start": "npm run start -w @syncfix/server",
     "smoke": "node scripts/smoke.mjs",
     "verify": "node scripts/verify.mjs"

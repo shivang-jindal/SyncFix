@@ -35,14 +35,14 @@ export function LoginPage() {
       queryClient.clear();
       await refresh();
       const first = session.memberships[0];
-      navigate(first ? `/${first.organizationId}/dashboard` : '/welcome', { replace: true });
+      navigate(first ? `/${first.organizationId}/connections` : '/welcome', { replace: true });
     },
   });
 
   return (
     <AuthLayout
-      title="Sign in to CollectFlow"
-      description="Invoice, track payments and follow up on overdue balances."
+      title="Sign in to SyncFix"
+      description="Keep CRM, billing and support records in sync across your stack."
       footer={
         <>
           No account yet?{' '}

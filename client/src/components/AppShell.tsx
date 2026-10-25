@@ -16,17 +16,36 @@ interface NavItem {
 
 const NAV: NavItem[] = [
   {
-    to: '/dashboard',
-    label: 'Dashboard',
-    icon: <Icon path="M3 10.5 10 4l7 6.5M5 9.5V16h10V9.5" />,
+    to: '/connections',
+    label: 'Connections',
+    icon: <Icon path="M5 4h4v4H5zM11 12h4v4h-4zM9 6h3a2 2 0 0 1 2 2v4" />,
   },
-  { to: '/invoices', label: 'Invoices', icon: <Icon path="M5 2.5h6l4 4v11H5zM11 2.5v4h4" /> },
-  { to: '/customers', label: 'Customers', icon: <Icon path="M7 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM3 17a4 4 0 0 1 8 0M13 6a2.5 2.5 0 1 1 0 5M14 17a3.5 3.5 0 0 1 3-3.4" /> },
-  { to: '/payments', label: 'Payments', icon: <Icon path="M2.5 6.5h15v9h-15zM2.5 10h15M5.5 14h3" /> },
+  {
+    to: '/sync-jobs',
+    label: 'Sync jobs',
+    icon: <Icon path="M4 5h4l2 3h6M4 15h4l2-3h6M13 5l3 3-3 3M13 12l3 3-3 3" />,
+  },
+  {
+    to: '/sync-runs',
+    label: 'Sync runs',
+    icon: <Icon path="M10 3a7 7 0 1 1-7 7M10 6v4l3 2M3 6v4h4" />,
+  },
+  {
+    to: '/issues',
+    label: 'Issues',
+    icon: <Icon path="M10 3 2.5 16h15L10 3ZM10 8v3M10 13.5v.5" />,
+  },
+  {
+    to: '/webhook-endpoints',
+    label: 'Webhooks',
+    icon: <Icon path="M7 4a3 3 0 0 1 5.2 2H16v4M13 16a3 3 0 0 1-5.2-2H4v-4M5 7l2 2M15 13l-2-2" />,
+  },
   { to: '/reports', label: 'Reports', icon: <Icon path="M4 16V9M8 16V5M12 16v-4M16 16V7" /> },
-  { to: '/reminders', label: 'Reminders', icon: <Icon path="M10 3a5 5 0 0 0-5 5v3l-1.5 2.5h13L15 11V8a5 5 0 0 0-5-5ZM8 15a2 2 0 0 0 4 0" /> },
-  { to: '/integrations', label: 'Integrations', icon: <Icon path="M8 5H6a3 3 0 0 0 0 6h1M12 5h2a3 3 0 0 1 0 6h-1M7 10h6" /> },
-  { to: '/settings', label: 'Settings', icon: <Icon path="M10 12.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5ZM10 2.5v2M10 15.5v2M4.7 4.7l1.4 1.4M13.9 13.9l1.4 1.4M2.5 10h2M15.5 10h2M4.7 15.3l1.4-1.4M13.9 6.1l1.4-1.4" /> },
+  {
+    to: '/organization',
+    label: 'Organization',
+    icon: <Icon path="M4 16V5h6v11M10 16V8h6v8M3 16h14M6 7h2M6 10h2M6 13h2M12 11h2M12 14h2" />,
+  },
 ];
 
 function Icon({ path }: { path: string }) {
@@ -86,7 +105,8 @@ export function AppShell({ children }: { children?: React.ReactNode }) {
         <Brand organizationName={activeOrganization?.organizationName ?? 'SyncFix'} />
         {navigation}
         <footer className="border-t border-line p-3 text-xs text-ink-subtle">
-          SyncFix tracks invoices and payments. It is not a bank or payment processor.
+          SyncFix keeps CRM, billing and support records in sync. It never overwrites a mapped
+          destination field without a rule.
         </footer>
       </aside>
 
@@ -116,7 +136,7 @@ export function AppShell({ children }: { children?: React.ReactNode }) {
             <ProfileMenu
               name={user?.displayName ?? ''}
               email={user?.email ?? ''}
-              settingsHref={`${base}/settings`}
+              settingsHref={`${base}/organization`}
               onSignOut={() => void signOut()}
             />
           </div>
@@ -140,7 +160,7 @@ function Brand({ organizationName }: { organizationName: string }) {
   return (
     <div className="flex items-center gap-2 px-4 py-4">
       <span className="flex h-7 w-7 items-center justify-center rounded-md bg-brand-600 text-[13px] font-bold text-white">
-        C
+        S
       </span>
       <span className="min-w-0">
         <span className="block truncate text-sm font-semibold text-ink">SyncFix</span>

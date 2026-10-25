@@ -1,3 +1,5 @@
+import './load-env.js';
+
 /** API process entry point. */
 
 import { createApp } from './app.js';

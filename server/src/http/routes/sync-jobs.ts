@@ -34,6 +34,9 @@ const previewBody = z.object({
   mapping: z.record(z.string()).default({}),
 });
 
+const enableBody = z.object({ enabled: z.boolean() });
+const runBody = z.object({ dryRun: z.boolean().default(false) });
+
 export function syncJobRouter(services: Services): Router {
   const router = Router({ mergeParams: true });
 
@@ -41,12 +44,21 @@ export function syncJobRouter(services: Services): Router {
     '/',
     validate({ query: jobListQuerySchema }),
     asyncHandler(async (req, res) => {
-      res.json(
-        await services.syncJobs.list(
-          req.organization!.id,
-          req.query as never,
-        ),
+      const query = req.query as unknown as { page: number; pageSize: number };
+      const { items, total } = await services.syncJobs.list(
+        req.organization!.id,
+        req.query as never,
       );
+      const hydrated = await Promise.all(
+        items.map((job) => services.syncJobs.toListItem(job, 'all time')),
+      );
+      res.json({
+        items: hydrated,
+        page: query.page,
+        pageSize: query.pageSize,
+        total,
+        totalPages: Math.max(1, Math.ceil(total / query.pageSize)),
+      });
     }),
   );
 
@@ -60,7 +72,7 @@ export function syncJobRouter(services: Services): Router {
         actorUserId: req.principal!.user.id,
         ...req.body,
       });
-      res.status(201).json({ job });
+      res.status(201).json({ job: await services.syncJobs.toListItem(job, 'all time') });
     }),
   );
 
@@ -72,7 +84,7 @@ export function syncJobRouter(services: Services): Router {
         req.organization!.id,
         req.params.jobId as string,
       );
-      res.json(await services.syncJobs.toListItem(job, ''));
+      res.json({ job: await services.syncJobs.toListItem(job, 'all time') });
     }),
   );
 
@@ -87,7 +99,7 @@ export function syncJobRouter(services: Services): Router {
         actorUserId: req.principal!.user.id,
         ...req.body,
       });
-      res.json({ job: await services.syncJobs.toListItem(job, '') });
+      res.json({ job: await services.syncJobs.toListItem(job, 'all time') });
     }),
   );
 
@@ -102,6 +114,62 @@ export function syncJobRouter(services: Services): Router {
           req.query as never,
         ),
       );
+    }),
+  );
+
+  router.post(
+    '/:jobId/status',
+    requirePermission('job.pause'),
+    validate({ params: jobIdParams, body: enableBody }),
+    asyncHandler(async (req, res) => {
+      const job = await services.syncJobs.setEnabled({
+        organizationId: req.organization!.id,
+        jobId: req.params.jobId as string,
+        actorUserId: req.principal!.user.id,
+        enabled: (req.body as { enabled: boolean }).enabled,
+        requestId: req.requestId,
+      });
+      res.json({ job: await services.syncJobs.toListItem(job, 'all time') });
+    }),
+  );
+
+  router.post(
+    '/:jobId/run',
+    requirePermission('job.run'),
+    validate({ params: jobIdParams, body: runBody }),
+    asyncHandler(async (req, res) => {
+      const job = await services.syncJobs.requireOwned(
+        req.organization!.id,
+        req.params.jobId as string,
+      );
+      if (!job.enabled) {
+        res.status(409).json({
+          error: {
+            code: 'CONFLICT',
+            message: 'Enable this job before asking it to run.',
+            requestId: req.requestId,
+          },
+        });
+        return;
+      }
+      const dryRun = (req.body as { dryRun: boolean }).dryRun;
+      const queued = await services.jobs.enqueue({
+        jobType: 'sync.run',
+        organizationId: req.organization!.id,
+        payload: {
+          organizationId: req.organization!.id,
+          jobId: job.id,
+          trigger: 'manual',
+          dryRun,
+        },
+        // A manual run is intentionally distinct from the scheduled attempt
+        // for the same minute, but double-clicks collapse into one job. A dry
+        // run and a real run are different actions: never collapse one into
+        // the other, or "Run now" would silently do nothing for 15 seconds
+        // after a rehearsal.
+        idempotencyKey: `sync.run:${job.id}:manual:${dryRun ? 'dry' : 'live'}:${Math.floor(Date.now() / 15_000)}`,
+      });
+      res.status(202).json({ queued: true, deduplicated: queued.deduplicated });
     }),
   );
 

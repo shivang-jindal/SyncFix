@@ -44,7 +44,20 @@ const METADATA_ADDRESSES = new Set([
 ]);
 
 /** Ports a user-configured read endpoint may target. Prevents port scanning. */
-export const ALLOWED_PORTS = new Set([80, 443, 8080, 8443]);
+export const DEFAULT_ALLOWED_PORTS = [80, 443, 8080, 8443] as const;
+
+export const ALLOWED_PORTS = new Set<number>(DEFAULT_ALLOWED_PORTS);
+
+/**
+ * Replaces the port allow-list. Called once per process from the service
+ * container so a self-hosted deployment can reach an internal API on a
+ * non-default port without weakening the check for everyone else.
+ */
+export function configureAllowedPorts(ports: number[]): void {
+  if (ports.length === 0) return;
+  ALLOWED_PORTS.clear();
+  for (const port of ports) ALLOWED_PORTS.add(port);
+}
 
 export const MAX_REDIRECTS = 3;
 export const DEFAULT_TIMEOUT_MS = 10_000;

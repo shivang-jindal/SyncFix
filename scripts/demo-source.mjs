@@ -26,7 +26,7 @@
 import { createServer } from 'node:http';
 import { Buffer } from 'node:buffer';
 
-const port = Number(process.argv[2] ?? process.env.DEMO_SOURCE_PORT ?? 4321);
+const port = Number(process.argv[2] ?? process.env.DEMO_SOURCE_PORT ?? 8080);
 
 /** Source contacts. One of them is deliberately missing an email. */
 const CONTACTS = [
@@ -138,6 +138,13 @@ const server = createServer(async (req, res) => {
     return;
   }
 
+  // The connector probes the configured path templates with the reserved
+  // entity name "default". Serving it keeps "Test connection" meaningful here.
+  if (segments[0] === 'default' && method === 'GET') {
+    json(res, 200, { data: CONTACTS.slice(0, 5), nextCursor: null });
+    return;
+  }
+
   if (segments[0] === 'contacts' && method === 'GET') {
     const limit = Math.min(Number(url.searchParams.get('limit') ?? '50') || 50, 100);
     const offset = Number(url.searchParams.get('cursor') ?? '0') || 0;
@@ -205,6 +212,7 @@ server.listen(port, '127.0.0.1', () => {
       'Routes:',
       '  GET  /contacts?limit=&cursor=   paginated source records',
       '  GET  /contacts/:id',
+      '  GET  /default                   probe used by Test connection',
       '  PUT  /customers/:id              idempotent upsert (echoes the key)',
       '  GET  /flaky                      always 503 (outage demo)',
       '  GET  /slow                       never answers (timeout demo)',

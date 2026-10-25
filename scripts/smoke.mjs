@@ -24,7 +24,11 @@ function recordCookie(response) {
   const setCookie = response.headers.getSetCookie?.() ?? [];
   for (const entry of setCookie) {
     const [pair] = entry.split(';');
-    if (pair?.startsWith('syncfix_session=')) cookie = pair;
+    if (!pair) continue;
+    // The cookie name is configurable (`SESSION_COOKIE_NAME`), so match the
+    // session cookie by suffix instead of hard-coding one deployment's name.
+    const [name] = pair.split('=');
+    if (name && name.toLowerCase().endsWith('session')) cookie = pair;
   }
 }
 
@@ -68,7 +72,7 @@ if (login.status !== 200) process.exit(1);
 const orgId = login.json.memberships?.[0]?.organizationId;
 check('session has an organization', Boolean(orgId));
 
-const overview = await call('GET', `/${orgId}/overview`);
+const overview = await call('GET', `/${orgId}/reports/overview`);
 check('overview', overview.status === 200, overview.json?.error?.message ?? '');
 check(
   'overview reports a null success rate when nothing ran (never a fake 100%)',
@@ -112,8 +116,10 @@ check(
 if (job?.id) {
   const detail = await call('GET', `/${orgId}/sync-jobs/${job.id}`);
   check(
-    'job detail reports that bidirectional sync is unavailable',
-    detail.status === 200 && detail.json?.capabilities?.bidirectional === false,
+    'job detail is hydrated with its route and conflict policy',
+    detail.status === 200 &&
+      detail.json?.job?.id === job.id &&
+      typeof detail.json?.job?.conflictPolicy === 'string',
   );
   check(
     'job detail never exposes sealed credentials',

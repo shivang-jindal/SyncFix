@@ -78,7 +78,7 @@ export function CreateOrganizationPage() {
         <div className="px-5 py-5">
           <h1 className="text-lg">Set up your business workspace</h1>
           <p className="mt-1 text-[13px] text-ink-muted">
-            Country, timezone and base currency are used for invoice numbering, reminder scheduling and reports.
+            Country, timezone and base currency are used for run schedules, report cut-offs and exports.
             You can change them later in Settings.
           </p>
 

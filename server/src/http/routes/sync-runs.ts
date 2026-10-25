@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 
-import { idParamSchema } from '@syncfix/shared';
+import { idParamSchema, runListQuerySchema } from '@syncfix/shared';
 
 import type { Services } from '../../container.js';
 import { notFound } from '../../errors.js';
@@ -18,6 +18,23 @@ export function runRouter(services: Services): Router {
   const router = Router({ mergeParams: true });
 
   router.get(
+    '/',
+    requirePermission('job.view'),
+    validate({ query: runListQuerySchema }),
+    asyncHandler(async (req, res) => {
+      const query = req.query as unknown as {
+        page: number;
+        pageSize: number;
+        status: string;
+        trigger: string;
+        sort: string;
+        order: 'asc' | 'desc';
+      };
+      res.json(await services.reports.runs(req.organization!.id, query));
+    }),
+  );
+
+  router.get(
     '/:runId',
     requirePermission('job.view'),
     validate({ params: runParams }),
@@ -30,7 +47,9 @@ export function runRouter(services: Services): Router {
 
       const notes: string[] = [];
       if (detail.run.dryRun) {
-        notes.push('This was a dry run: no destination write was attempted.');
+        notes.push(
+          'This was a dry run: no destination write was attempted, no record was marked synced and the checkpoint did not advance. Created and updated counts are projections of what a real run would do.',
+        );
       }
       if (detail.run.status === 'partial') {
         notes.push(

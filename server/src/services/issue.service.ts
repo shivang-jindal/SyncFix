@@ -7,7 +7,7 @@
  * understand what went wrong (Part D / D10).
  */
 
-import { and, count, desc, eq, gte, inArray, lte, sql, type SQL } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gte, inArray, lte, sql, type SQL } from 'drizzle-orm';
 
 import {
   ISSUE_TYPE_LABELS,
@@ -203,7 +203,13 @@ export class IssueService {
           : query.sort === 'severity'
             ? syncIssues.severity
             : syncIssues.lastSeenAt;
-    const direction = query.order === 'asc' ? sql` asc` : sql` desc`;
+    const direction = query.order === 'asc' ? asc : desc;
+    // Severity is an enum with a deliberate rank; sorting it alphabetically
+    // would put "warning" above "critical". Every other sort is a plain column.
+    const orderBy =
+      query.sort === 'severity'
+        ? sql`case ${syncIssues.severity} when 'critical' then 3 when 'warning' then 2 else 1 end ${query.order === 'asc' ? sql`asc` : sql`desc`}`
+        : direction(sortColumn);
 
     const rows = await this.db
       .select({
@@ -213,7 +219,7 @@ export class IssueService {
       .from(syncIssues)
       .innerJoin(syncJobs, eq(syncJobs.id, syncIssues.syncJobId))
       .where(where)
-      .orderBy(sql`case ${sortColumn} ${query.sort === 'severity' ? sql`when 'critical' then 3 when 'warning' then 2 else 1 end` : sortColumn}${direction}`)
+      .orderBy(orderBy)
       .limit(query.pageSize)
       .offset((query.page - 1) * query.pageSize);
 

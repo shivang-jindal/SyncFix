@@ -8,10 +8,10 @@ export function NotFoundPage() {
       <Card className="w-full max-w-md">
         <EmptyState
           title="Page not found"
-          description="That address does not match anything in CollectFlow. Check the link, or go back to the dashboard."
+          description="That address does not match anything in SyncFix. Check the link, or go back to your workspace."
           action={
             <Link to="/">
-              <Button variant="primary">Go to CollectFlow</Button>
+              <Button variant="primary">Go to SyncFix</Button>
             </Link>
           }
         />

@@ -14,7 +14,9 @@
  *    logical record always produces the same key.
  *  - **Dry runs perform zero destination writes.** The adapter's `upsertRecord`
  *    is never called when `dryRun` is set; the run still fetches, validates and
- *    transforms so the operator sees a real plan.
+ *    transforms so the operator sees a real plan. A dry run also never advances
+ *    the checkpoint or marks a record as synced: its write step reports the
+ *    projected count as `wouldWrite`.
  *  - **Partial success is reported, never hidden.** A run that wrote some
  *    records and failed others finishes as `partial` and keeps the failed
  *    records in `sync_issues`.
@@ -57,7 +59,7 @@ import {
 } from '../db/schema.js';
 import { AppError, conflict, notFound, unprocessable } from '../errors.js';
 import { redactPayload, safeUrlLabel } from '../lib/redact.js';
-import { stableHash } from '@syncfix/shared';
+import { stableHash } from '../lib/stable-hash.js';
 import type { ConnectionService, ConnectionRecord } from './connection.service.js';
 import type { IssueService } from './issue.service.js';
 import { applyMapping, normalizeMapping, readPath, writePath } from './mapping.service.js';
@@ -205,6 +207,7 @@ export class RunEngine {
           if (page.records.length === 0) break;
 
           const writeStep = await this.startStep(input.organizationId, run.id, 'write');
+          const before = { ...counts };
           await this.processBatch({
             organizationId: input.organizationId,
             job,
@@ -218,30 +221,36 @@ export class RunEngine {
             counts,
             notes,
           });
-          await this.finishStep(writeStep.id, 'succeeded', {
-            written: counts.created + counts.updated,
-            skipped: counts.skipped,
-            failed: counts.failed,
-          });
+          const writtenDelta =
+            counts.created + counts.updated - (before.created + before.updated);
+          await this.finishStep(
+            writeStep.id,
+            'succeeded',
+            input.dryRun
+              ? {
+                  wouldWrite: writtenDelta,
+                  skipped: counts.skipped - before.skipped,
+                  failed: counts.failed - before.failed,
+                }
+              : {
+                  written: writtenDelta,
+                  skipped: counts.skipped - before.skipped,
+                  failed: counts.failed - before.failed,
+                },
+          );
 
-          // Checkpoint only after the whole batch was persisted.
-          if (page.nextCursor) {
-            lastCommittedCursor = { cursor: page.nextCursor };
+          // Checkpoint only after the whole batch was persisted. A dry run
+          // never moves the checkpoint: a later real run must resume where the
+          // last committed real run finished, otherwise the rehearsal would
+          // silently skip records.
+          if (!input.dryRun) {
+            lastCommittedCursor = page.nextCursor ? { cursor: page.nextCursor } : { cursor: null };
             await this.db
               .update(syncJobs)
               .set({ checkpoint: lastCommittedCursor, updatedAt: new Date() })
               .where(eq(syncJobs.id, job.id));
-          } else {
-            lastCommittedCursor = { cursor: null };
-            await this.db
-              .update(syncJobs)
-              .set({ checkpoint: lastCommittedCursor, updatedAt: new Date() })
-              .where(eq(syncJobs.id, job.id));
-            await this.finishStep(fetchStep.id, 'succeeded', { fetched: counts.fetched });
-            break;
           }
 
-          if (page.records.length === 0) break;
           cursor = page.nextCursor;
           if (page.nextCursor === null) break;
         }
@@ -255,6 +264,7 @@ export class RunEngine {
         });
         if (record) {
           const writeStep = await this.startStep(input.organizationId, run.id, 'write');
+          const before = { ...counts };
           await this.processBatch({
             organizationId: input.organizationId,
             job,
@@ -268,11 +278,23 @@ export class RunEngine {
             counts,
             notes,
           });
-          await this.finishStep(writeStep.id, 'succeeded', {
-            written: counts.created + counts.updated,
-            skipped: counts.skipped,
-            failed: counts.failed,
-          });
+          const writtenDelta =
+            counts.created + counts.updated - (before.created + before.updated);
+          await this.finishStep(
+            writeStep.id,
+            'succeeded',
+            input.dryRun
+              ? {
+                  wouldWrite: writtenDelta,
+                  skipped: counts.skipped - before.skipped,
+                  failed: counts.failed - before.failed,
+                }
+              : {
+                  written: writtenDelta,
+                  skipped: counts.skipped - before.skipped,
+                  failed: counts.failed - before.failed,
+                },
+          );
         }
       }
 
@@ -401,7 +423,17 @@ export class RunEngine {
       const existing = existingRows[0];
 
       /* -- Skip unchanged ------------------------------------------------ */
-      if (existing && existing.lastHash === payloadHash && existing.status === 'synced') {
+      // A confirmed write leaves the record in one of these states. If the
+      // source payload has not changed since, there is nothing to send: this is
+      // the fast path that keeps a scheduled job cheap. A failed or skipped
+      // attempt is never treated as synced.
+      if (
+        existing &&
+        existing.lastHash === payloadHash &&
+        (existing.status === 'synced' ||
+          existing.status === 'created' ||
+          existing.status === 'updated')
+      ) {
         input.counts.skipped += 1;
         continue;
       }
@@ -513,17 +545,11 @@ export class RunEngine {
 
       /* -- Dry run: stop here, before any destination call ---------------- */
       if (input.dryRun) {
-        input.counts.created += 1;
-        await this.upsertRecordRow({
-          organizationId: input.organizationId,
-          jobId: input.job.id,
-          record,
-          payloadHash,
-          sourceVersion,
-          status: 'skipped',
-          destinationRecordKey: null,
-          redactedSource: redactPayload(payload) as Record<string, unknown>,
-        });
+        // A dry run must not change state: no destination call and no record
+        // row is written. The counters are a projection of what a real run
+        // would do, and the write step reports them as `wouldWrite`.
+        if (existing?.destinationRecordKey) input.counts.updated += 1;
+        else input.counts.created += 1;
         continue;
       }
 
@@ -807,19 +833,25 @@ export class RunEngine {
     destinationVersion?: string | null;
     redactedSource: Record<string, unknown>;
   }): Promise<void> {
+    // Only a confirmed write proves a destination record exists. A failed or
+    // skipped attempt must never look like a synced record, otherwise the next
+    // run would treat the source key as an existing destination key and
+    // silently "skip" a record that was never written.
+    const written = input.status === 'created' || input.status === 'updated';
+    const insertedDestinationKey = written
+      ? (input.destinationRecordKey ?? input.record.key)
+      : (input.destinationRecordKey ?? null);
+
     await this.db
       .insert(syncRecords)
       .values({
         organizationId: input.organizationId,
         syncJobId: input.jobId,
         sourceRecordKey: input.record.key,
-        destinationRecordKey:
-          input.destinationRecordKey === undefined
-            ? input.record.key
-            : input.destinationRecordKey,
+        destinationRecordKey: insertedDestinationKey,
         sourceVersion: input.sourceVersion,
         destinationVersion: input.destinationVersion ?? null,
-        lastSyncedAt: input.status === 'skipped' ? null : new Date(),
+        lastSyncedAt: written ? new Date() : null,
         lastHash: input.payloadHash,
         status: input.status,
         redactedSource: input.redactedSource,
@@ -827,10 +859,16 @@ export class RunEngine {
       .onConflictDoUpdate({
         target: [syncRecords.syncJobId, syncRecords.sourceRecordKey],
         set: {
-          destinationRecordKey: input.destinationRecordKey ?? input.record.key,
+          // Keep a known destination key when the attempt did not write, and
+          // never claim a sync time for a record that was not synced.
+          ...(input.destinationRecordKey !== undefined
+            ? { destinationRecordKey: input.destinationRecordKey }
+            : written
+              ? { destinationRecordKey: input.record.key }
+              : {}),
           sourceVersion: input.sourceVersion,
           destinationVersion: input.destinationVersion ?? null,
-          lastSyncedAt: input.status === 'skipped' ? null : new Date(),
+          ...(written ? { lastSyncedAt: new Date() } : {}),
           lastHash: input.payloadHash,
           status: input.status,
           redactedSource: input.redactedSource,

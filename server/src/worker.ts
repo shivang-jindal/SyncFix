@@ -1,3 +1,5 @@
+import './load-env.js';
+
 /** Standalone background worker process. */
 
 import { loadConfig } from './config.js';

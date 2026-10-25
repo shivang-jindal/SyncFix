@@ -37,7 +37,7 @@ export function RegisterPage() {
 
   return (
     <AuthLayout
-      title="Create your CollectFlow account"
+      title="Create your SyncFix account"
       description="You will set up your business workspace next."
       footer={
         <>
