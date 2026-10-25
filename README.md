@@ -21,7 +21,7 @@
 - **Checkpoint Resume**: Crash-safe, resumable runs
 - **Per-Record Repair**: Retry / replay / skip / resolve
 - **Schema Drift Detection**: Unknown fields surfaced as issues
-- **20 Tests**: Connection, sync job, run engine, repair (all passing)
+- **29 Tests**: Connection, sync job, run engine, repair (all passing)
 
 ---
 
@@ -92,8 +92,32 @@ All settings via environment variables (see `.env.example`):
 | `ENCRYPTION_KEY` | Yes | 64-char hex (32 bytes) |
 | `SESSION_COOKIE_NAME` | No | Session cookie name (default `syncfix_session`) |
 | `EMAIL_PROVIDER` | No | `smtp` \| `disabled` \| `log` |
+| `FIREBASE_PROJECT_ID` | For Google sign-in | Firebase project id used to verify Google ID tokens |
+| `VITE_FIREBASE_*` | For Google sign-in | Public Firebase web config read by the browser |
 | `OUTBOUND_ALLOWED_PORTS` | No | Ports connectors may reach (default `80,443,8080,8443`) |
 | `SSRF_ALLOW_HOSTS` | No | Development only; loopback hosts for the local fixture |
+
+### Google sign-in
+
+Google sign-in uses Firebase Authentication in the browser and verifies the
+resulting ID token on the server against Google's published keys. No service
+account or client secret is stored.
+
+1. In the Firebase console, create a project and enable **Authentication -> Sign-in method -> Google**.
+2. Add a web app, then put its public configuration in the repository `.env` (one root file, read by both the client and the server):
+
+   ```bash
+   VITE_FIREBASE_API_KEY=...
+   VITE_FIREBASE_AUTH_DOMAIN=your-project.firebaseapp.com
+   VITE_FIREBASE_PROJECT_ID=your-project
+   VITE_FIREBASE_APP_ID=...
+   FIREBASE_PROJECT_ID=your-project
+   ```
+
+3. Add `http://localhost:5173` and your production origin to **Authentication -> Settings -> Authorized domains**.
+
+With no Firebase values the button is rendered disabled with a clear note, and the
+API refuses Google sign-in; email and password sign-in keeps working.
 
 ---
 
@@ -104,7 +128,7 @@ All settings via environment variables (see `.env.example`):
 | `npm run dev` | Start dev servers (client + server) |
 | `npm run build` | Production build |
 | `npm run verify` | Typecheck + Lint + Test + Build |
-| `npm test` | Unit/integration tests (20 passing) |
+| `npm test` | Unit/integration tests (29 passing, 2 skipped) |
 | `npm run db:generate` | Generate Drizzle migrations |
 | `npm run db:migrate` | Run migrations |
 | `npm run smoke` | Smoke test against running instance |

@@ -8,6 +8,7 @@
 
 import { z } from 'zod';
 
+import './load-env.js';
 import { DEFAULT_ALLOWED_PORTS } from './lib/safe-fetch.js';
 
 const booleanish = z
@@ -51,6 +52,13 @@ const envSchema = z.object({
    * at rest. Required only when an integration stores credentials.
    */
   ENCRYPTION_KEY: optionalString,
+
+  /**
+   * Firebase project id used to verify Google sign-in ID tokens. Optional: with
+   * no value the Google button renders disabled and the endpoint refuses work.
+   * This is an identifier, not a secret.
+   */
+  FIREBASE_PROJECT_ID: optionalString,
 
   /** Background worker. */
   WORKER_ENABLED: booleanish.default(true),
@@ -107,6 +115,10 @@ export interface AppConfig {
     deliversMessages: boolean;
   };
   encryptionKey: Buffer | null;
+  firebase: {
+    /** Null when Google sign-in is not configured. */
+    projectId: string | null;
+  };
   worker: {
     enabled: boolean;
     pollIntervalMs: number;
@@ -182,6 +194,12 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
     warnings.push('COOKIE_SECURE should stay enabled in production.');
   }
 
+  if (!env.FIREBASE_PROJECT_ID) {
+    warnings.push(
+      'FIREBASE_PROJECT_ID is not set: Google sign-in is disabled. Existing sign-in methods still work.',
+    );
+  }
+
   const outboundAllowedPorts = parseAllowedPorts(env.OUTBOUND_ALLOWED_PORTS, warnings);
 
   const cookieSecure = env.COOKIE_SECURE ?? env.NODE_ENV === 'production';
@@ -208,6 +226,9 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
       deliversMessages: env.EMAIL_PROVIDER === 'smtp',
     },
     encryptionKey,
+    firebase: {
+      projectId: env.FIREBASE_PROJECT_ID ?? null,
+    },
     worker: {
       enabled: env.WORKER_ENABLED,
       pollIntervalMs: env.WORKER_POLL_INTERVAL_MS,
