@@ -7,14 +7,11 @@ import { SessionProvider, useSession } from './lib/session';
 import { AcceptInvitationPage } from './pages/AcceptInvitation';
 import { ConnectionsPage } from './pages/Connections';
 import { CreateOrganizationPage } from './pages/CreateOrganization';
-import { ForgotPasswordPage } from './pages/ForgotPassword';
 import { IssuesPage } from './pages/Issues';
 import { LoginPage } from './pages/Login';
 import { NotFoundPage } from './pages/NotFound';
 import { OrganizationPage } from './pages/Organization';
-import { RegisterPage } from './pages/Register';
 import { ReportsPage } from './pages/Reports';
-import { ResetPasswordPage } from './pages/ResetPassword';
 import { SyncJobsPage } from './pages/SyncJobs';
 import { SyncRunsPage } from './pages/SyncRuns';
 import { WebhookEndpointsPage } from './pages/WebhookEndpoints';
@@ -103,9 +100,9 @@ function OrganizationLayout() {
 
 const routes: RouteObject[] = [
   { path: '/login', element: <LoginPage /> },
-  { path: '/register', element: <RegisterPage /> },
-  { path: '/forgot-password', element: <ForgotPasswordPage /> },
-  { path: '/reset-password', element: <ResetPasswordPage /> },
+  { path: '/register', element: <Navigate to="/login" replace /> },
+  { path: '/forgot-password', element: <Navigate to="/login" replace /> },
+  { path: '/reset-password', element: <Navigate to="/login" replace /> },
   { path: '/accept-invitation', element: <AcceptInvitationPage /> },
   {
     path: '/welcome',
