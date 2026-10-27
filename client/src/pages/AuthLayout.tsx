@@ -3,6 +3,7 @@
 import type { ReactNode } from 'react';
 
 import { Card } from '../components/ui';
+import { ThemeToggle } from '../components/ThemeToggle';
 
 export function AuthLayout({
   title,
@@ -18,11 +19,14 @@ export function AuthLayout({
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-surface-sunken px-4 py-10">
       <div className="w-full max-w-sm">
-        <div className="mb-6 flex items-center gap-2">
-          <span className="flex h-8 w-8 items-center justify-center rounded-md bg-brand-600 text-sm font-bold text-white">
-            S
-          </span>
-          <span className="text-base font-semibold text-ink">SyncFix</span>
+        <div className="mb-6 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <span className="flex h-10 w-10 items-center justify-center rounded-sm bg-ink text-white shadow-[3px_3px_0_var(--color-brand-500)]">
+              <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" aria-hidden="true"><path d="M5 7h8a3 3 0 0 1 3 3v1M19 17h-8a3 3 0 0 1-3-3v-1M13 5l3 3-3 3M11 13l-3 3 3 3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
+            </span>
+            <span className="text-base font-bold tracking-tight text-ink">SyncFix</span>
+          </div>
+          <ThemeToggle />
         </div>
         <Card>
           <div className="px-5 py-5">
